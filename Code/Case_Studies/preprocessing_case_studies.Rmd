@@ -1,0 +1,266 @@
+---
+title: "Case Studies: Cleaning Data"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+# Load packages
+library(dplyr)
+library(naniar)
+```
+
+In the following document we pre-process the case study data.
+```{r}
+# Load in all case study data
+adult_train = read.csv("adult/adult.data", header = FALSE) # census income (adult)
+adult_test = read.csv("adult/adult.test", header = FALSE, skip = 1)
+diabetes = read.csv("diabetes/diabetic_data.csv") # diabetes
+```
+
+
+# Census Income (Adult 50k) data
+## Pre-processing
+```{r}
+# Merge adult train and adult test together to create one large dataset
+adult = rbind(adult_train, adult_test)
+```
+
+```{r}
+dim(adult)
+```
+
+```{r}
+# Assign variable names to the data
+colnames(adult) = c("age", "workclass", "fnlwgt", "education", "education-num", 
+                    "marital-status", "occupation", "relationship", "race", 
+                    "sex", "capital-gain", "capital-loss", "hours-per-week", 
+                    "native-country", "income")
+```
+
+We check the number of missing values
+```{r}
+# Missing values are coded as ? instead of NA
+# Recode to NA
+adult[adult == " ?"] = NA
+sum(is.na(adult))
+```
+
+The number of missing values is 6465.
+
+Next, we check what the percentage of missing values is
+```{r}
+pct_miss(adult)
+```
+
+We use a complete case analysis, as the percentage is lower than 5%.
+```{r}
+# Make complete cases
+adult = adult %>%
+  filter(complete.cases(.))
+```
+
+We remove not needed variables and clean the data
+```{r}
+# Remove variables that are not needed (fnlwgt) or are a replication of another variable (education-num)
+adult = select(adult, -fnlwgt, -'education-num')
+
+# Transform age from character to numeric
+adult$age = as.numeric(adult$age)
+```
+
+```{r}
+# Check the outcome variable, which shows outcomes are coded both with and without .
+table(adult$income)
+
+# Remove whitespace form start and end of string for binary variables (if present)
+adult$income = gsub("^\\s+|\\s+$", "", adult$income) 
+adult$sex = gsub("^\\s+|\\s+$", "", adult$sex)
+
+# remove . from test data at end string
+adult$income = gsub("\\.$", "", adult$income) 
+
+table(adult$income)
+```
+
+Next, we transform variables into factors and rename some levels
+```{r}
+# Define binary factors 
+binary_factor = c("income", "sex")
+adult[, binary_factor]= lapply(adult[, binary_factor], as.factor)
+adult$income = as.numeric(adult$income == ">50K") # change to 0-1 (1 = >50K)
+adult$sex = as.numeric(adult$sex == "Male") # Change to 0-1 (Male = 1)
+
+# Define factors
+nominal_factor = c("workclass", "education", "marital-status", "occupation", 
+                   "relationship", "race", "native-country")
+
+# Remove whitespace (often a space is before each entry) and transform into a factor
+for (col in nominal_factor) {
+  adult[[col]] <- gsub("^\\s+|\\s+$", "", adult[[col]])
+  adult[[col]] = as.factor(adult[[col]])
+}
+str(adult)
+
+# Rename columns
+adult = adult %>%
+  rename(
+    marital_status = `marital-status`,
+    native_country = `native-country`,
+    capital_gain = `capital-gain`,
+    capital_loss = `capital-loss`,
+    hours_per_week = `hours-per-week`
+  )
+
+# Change outcome variable to y
+colnames(adult)[13] = "y"
+```
+
+
+A summary
+```{r}
+summary(adult)
+```
+
+Finally, we save the cleaned data to be used in our analysis.
+```{r}
+write.csv(x = adult, file = "adult_cleaned.csv", row.names = FALSE)
+```
+
+
+
+# Diabetes data
+## Pre-processing
+We check the number of missing values
+```{r}
+# Missing values are coded as ? instead of NA
+# Recode to NA
+diabetes[diabetes == "?"] = NA
+
+# Check number of missing values
+sum(is.na(diabetes))
+```
+
+The number of missing values is 192849.
+
+# Removal of variables
+weight, payer_code, and medical_specialty have many missing values. The authors removed weight and payer_code, but kept medical_specialty. We remove all three.
+```{r}
+colSums(is.na(diabetes))
+```
+```{r}
+# Remove the covariates with many missing values
+diabetes = diabetes %>% select(-weight, -payer_code, -medical_specialty)
+```
+
+Next, we check what the percentage of missing values is
+```{r}
+pct_miss(diabetes)
+```
+
+We use a complete case analysis, as the percentage is lower than 5%.
+```{r}
+diabetes = diabetes %>%
+  filter(complete.cases(.))
+```
+
+### Outcome variable readmitted
+The researchers were interested in early readmission. So, readmitted within 30 days is class 1, while readmitted after 30 days or no readmission are of class 0.
+```{r}
+diabetes$y <- ifelse(diabetes$readmitted == "<30", 1, 0)
+```
+
+### Visit
+Researchers also only considered the first encounter of the patient.
+```{r}
+diabetes = diabetes %>%
+  group_by(patient_nbr) %>%  
+  slice(1) %>%  # select only the first entry of each patient
+  ungroup()
+```
+
+The original authors also deleted patients who died or were admitted to a hospice. We did not to this, as this was not very clearly specified in their paper and no clear steps were provided.
+
+
+### Recoding
+`diag_1`, `diag_2`, and `diag_3` have 848, 923, and 954 distinct categories that correspond to diagnoses, respectively. That are a lot of factors. By consulting the paper for this data, we use Table 2 to group the categories into 9 more general ones. The categories correspond to 9 groups. Table 2 shows the icd9 codes that correspond to the groups.
+
+```{r}
+for (var in c("diag_1", "diag_2", "diag_3")) {
+  
+  diabetes[[paste0(var, "_group")]] = "Other"
+  
+  diabetes[[paste0(var, "_group")]][diabetes[[var]] %in% 390:459 | diabetes[[var]] == 785] = "Circulatory"
+  
+  diabetes[[paste0(var, "_group")]][diabetes[[var]] %in% 460:519 | diabetes[[var]] == 786] = "Respiratory"
+  
+  diabetes[[paste0(var, "_group")]][diabetes[[var]] %in% 520:579 | diabetes[[var]] == 787] = "Digestive"
+  
+  diabetes[[paste0(var, "_group")]][grepl("^250\\.", diabetes[[var]])] = "Diabetes"
+  
+  diabetes[[paste0(var, "_group")]][diabetes[[var]] %in% 800:999] = "Injury"
+  
+  diabetes[[paste0(var, "_group")]][diabetes[[var]] %in% 710:739] = "Musculoskeletal"
+  
+  diabetes[[paste0(var, "_group")]][diabetes[[var]] %in% 580:629 | diabetes[[var]] == 788] = "Genitourinary"
+  
+  diabetes[[paste0(var, "_group")]][diabetes[[var]] %in% 140:239] = "Neoplasms"
+  
+}
+
+```
+
+
+### Cleaning and Recoding
+We remove variables that are not important predictors as they have been recoded or are only identifiers.
+```{r}
+diabetes = diabetes %>% select(-encounter_id, -patient_nbr, -diag_1, -diag_2, -diag_3, -readmitted)
+```
+
+
+```{r}
+# Name all variables that are factors
+factors_variables = c(
+  "race", "gender", "age", "admission_type_id", "discharge_disposition_id", 
+  "admission_source_id", "max_glu_serum", "A1Cresult", "metformin", "repaglinide", 
+  "nateglinide", "chlorpropamide", "glimepiride", "acetohexamide", "glipizide", 
+  "glyburide", "tolbutamide", "pioglitazone", "rosiglitazone", "acarbose", 
+  "miglitol", "troglitazone", "tolazamide", "examide", "citoglipton", "insulin", 
+  "glyburide.metformin", "glipizide.metformin", "glimepiride.pioglitazone", 
+  "metformin.rosiglitazone", "metformin.pioglitazone", "change", "diabetesMed", 
+  "y", "diag_1_group", "diag_2_group", "diag_3_group"
+  )
+
+# Recode to class factor
+diabetes[, factors_variables]= lapply(diabetes[, factors_variables], as.factor)
+```
+
+
+We check the summary
+```{r}
+summary(diabetes)
+```
+
+examide, citoglipton, glimepiride.pioglitazone, metformin.rosiglitazone only have entry No. Therefore, we remove variables with only 1 level
+```{r}
+diabetes = diabetes %>% select(-examide, -citoglipton, -`glimepiride.pioglitazone`, -`metformin.rosiglitazone`)
+```
+
+```{r}
+dim(diabetes)
+```
+
+Finally, we save the cleaned data to be used in our analysis.
+```{r}
+write.csv(x = diabetes, file = "diabetes_cleaned.csv", row.names = FALSE)
+```
+
+
+
+
+
+
+
+
