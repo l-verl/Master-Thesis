@@ -16,7 +16,7 @@ We provide some general instructions to make it work.
 **Exploratory Analysis**  
 To run the exploratory analysis, the following documents are needed:
 
-- The script that will run the whole analysis: [run_script_exploratory.R](https://github.com/l-verl/Master-Thesis/blob/main/Code/Analysis/run_script_in_depth.R)
+- The script that will run the whole analysis: [run_script_exploratory.R](https://github.com/l-verl/Master-Thesis/blob/main/Code/Analysis/run_script_exploratory.R)
 - The script containing the underlying functions used: [functions_final.R](https://github.com/l-verl/Master-Thesis/blob/main/Code/Analysis/functions_final.R), this should not be changed. This contains all functions used.
 
 
