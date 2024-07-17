@@ -185,7 +185,7 @@ The original authors also deleted patients who died or were admitted to a hospic
 
 
 ### Recoding
-`diag_1`, `diag_2`, and `diag_3` have 848, 923, and 954 distinct categories that correspond to diagnoses, respectively. That are a lot of factors. By consulting the paper for this data, we use Table 2 to group the categories into 9 more general ones. The categories correspond to 9 groups. Table 2 shows the icd9 codes that correspond to the groups.
+`diag_1`, `diag_2`, and `diag_3` have 692, 716, and 756 distinct categories that correspond to diagnoses, respectively. That are a lot of factors. By consulting the paper for this data, we use Table 2 to group the categories into 9 more general ones. The categories correspond to 9 groups. Table 2 shows the icd9 codes that correspond to the groups.
 
 ```{r}
 for (var in c("diag_1", "diag_2", "diag_3")) {
